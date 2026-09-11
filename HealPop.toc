@@ -8,7 +8,6 @@
 ## X-Category: Combat
 ## X-License: MIT
 ## X-Website: https://github.com/alewine/wowaddon_healpop
-## X-Curse-Project-ID: CURSEFORGE_ID
 ## SavedVariablesPerCharacter: HealPopDB
 
 Data.lua
