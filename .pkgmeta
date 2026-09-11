@@ -1,3 +1,5 @@
+enable-toc-creation: yes
+
 package-as: HealPop
 
 manual-changelog:
