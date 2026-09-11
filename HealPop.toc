@@ -1,0 +1,18 @@
+## Interface: 11509
+## Interface-Classic: 11509
+## Interface-BCC: 20506
+## Title: HealPop
+## Notes: One-click panic button: best available self-heal, stone, or potion.
+## Author: Zeroseven
+## Version: @project-version@
+## X-Category: Combat
+## X-License: MIT
+## X-Website: https://github.com/alewine/wowaddon_healpop
+## X-Curse-Project-ID: CURSEFORGE_ID
+## SavedVariablesPerCharacter: HealPopDB
+
+Data.lua
+Core.lua
+UI.lua
+Config.lua
+Main.lua

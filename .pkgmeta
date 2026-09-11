@@ -1,0 +1,16 @@
+package-as: HealPop
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+license-output: LICENSE
+
+ignore:
+  - .git
+  - .github
+  - .gitignore
+  - .pkgmeta
+  - screenshots
+  - media
+  - logo.png
