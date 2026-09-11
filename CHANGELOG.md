@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1
+- Published builds now cover Classic Era as well as TBC Anniversary. The 1.0
+  upload was listed for 2.5.6 only, so Era players could not find the addon
+  even though it has always supported 1.15.x.
+- Release builds generate a TOC per game flavor rather than collapsing to the
+  single plain Interface value.
+
 ## 1.0 — 2026-09-11
 
 Initial release.
