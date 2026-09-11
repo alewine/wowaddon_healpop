@@ -26,6 +26,56 @@ local categoryRows = {}
 local entryRows = {}
 local RefreshCategories, RefreshEntries
 
+-- ── Tooltips ─────────────────────────────────────────────────────────
+-- Title and body may be functions, for rows whose meaning changes in place
+-- (category rows are reordered; entry rows are reused as the list scrolls).
+local function ShowTip(owner, title, body)
+    if type(title) == "function" then title = title() end
+    if type(body) == "function" then body = body() end
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    GameTooltip:SetText(title or "", GOLD[1], GOLD[2], GOLD[3])
+    if body and body ~= "" then GameTooltip:AddLine(body, 1, 1, 1, true) end
+    GameTooltip:Show()
+end
+
+local function AttachTip(frame, title, body)
+    frame:SetScript("OnEnter", function(self) ShowTip(self, title, body) end)
+    frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+-- A checkbox's label sits outside the box's own hit area, and the label is
+-- what people point at. Widen the hit area over the text: hovering it shows
+-- the tooltip and clicking it toggles, as Blizzard's own options do.
+local function WidenOverLabel(cb, label)
+    local w = (label and label:GetStringWidth()) or 0
+    cb:SetHitRectInsets(0, -math.max(40, w + 6), 0, 0)
+end
+
+-- A slider's label floats above its bar. Widening the bar's hit area would
+-- make a click on the label move the value, so a separate strip over the label
+-- carries the tooltip instead.
+local function TipSlider(slider, title, body)
+    local strip = CreateFrame("Frame", nil, slider:GetParent())
+    strip:SetPoint("BOTTOMLEFT", slider, "TOPLEFT", 0, 0)
+    strip:SetPoint("BOTTOMRIGHT", slider, "TOPRIGHT", 0, 0)
+    strip:SetHeight(16)
+    strip:EnableMouse(true)
+    AttachTip(strip, title, body)
+    AttachTip(slider, title, body)
+end
+
+-- Dropdowns: the text area and the arrow button. The arrow is Blizzard's, so
+-- hook rather than replace its scripts.
+local function TipDropdown(dd, title, body)
+    dd:EnableMouse(true)
+    AttachTip(dd, title, body)
+    local arrow = _G[dd:GetName() .. "Button"]
+    if arrow then
+        arrow:HookScript("OnEnter", function(self) ShowTip(self, title, body) end)
+        arrow:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+end
+
 local function CategoryLabel(key)
     for _, c in ipairs(ns.CATEGORIES) do
         if c.key == key then return c.label end
@@ -74,6 +124,15 @@ local function CreateCategoryRow(parent, i, anchorTo)
         RefreshEntries()
         Changed()
     end)
+
+    -- Over the category name, stopping short of the rank number and arrows.
+    row.check:SetHitRectInsets(0, -95, 0, 0)
+    AttachTip(row.check,
+        function() return CategoryLabel(ns.DB().categoryOrder[i]) end,
+        "Unchecked, nothing in this category is ever used.\n\n"
+        .. "The order sets what gets tried first: left-click works down your "
+        .. "consumable categories in this order, right-click your spells. "
+        .. "Within a category the strongest heal comes first.")
 
     row.label = row:CreateFontString(nil, "OVERLAY")
     row.label:SetFont("Fonts\\FRIZQT__.TTF", 12, "")
@@ -132,6 +191,14 @@ local function CreateEntryRow(parent, i)
         ns.DB().disabled[row.entryKey] = (not self:GetChecked()) or nil
         Changed()
     end)
+
+    -- Over the icon and name, stopping short of the heal number.
+    row.check:SetHitRectInsets(0, -140, 0, 0)
+    AttachTip(row.check,
+        function() return row.entryName or "" end,
+        "Checked: HealPop may use this.\n\n"
+        .. "Uncheck to keep it out of every click, to save a rare potion "
+        .. "for example. The number on the right is how much it heals.")
 
     row.icon = row:CreateTexture(nil, "ARTWORK")
     row.icon:SetSize(16, 16)
@@ -208,6 +275,7 @@ function RefreshEntries()
                 row.header:Hide()
                 row.check:Show(); row.icon:Show(); row.name:Show(); row.heal:Show()
                 row.entryKey = item.key
+                row.entryName = item.name
                 row.check:SetChecked(not db.disabled[item.key])
                 row.icon:SetTexture(item.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                 local label = item.name or "?"
@@ -245,6 +313,7 @@ local function AddCheck(parent, name, anchor, gapY, label, get, set)
     local cb = CreateFrame("CheckButton", "HealPopCfg" .. name, parent, "UICheckButtonTemplate")
     cb:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", -2, gapY)
     _G[cb:GetName() .. "Text"]:SetText(label)
+    WidenOverLabel(cb, _G[cb:GetName() .. "Text"])
     cb.get = get
     cb:SetScript("OnClick", function(self) set(self:GetChecked() and true or false) end)
     return cb
@@ -505,6 +574,79 @@ function ns.CreateConfig()
     config.entryEmpty:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -10)
     config.entryEmpty:SetText("No usable heals found.")
     config.entryEmpty:Hide()
+
+    -- ── Hover explanations ───────────────────────────────────────────
+    -- "Panel" in the labels is the flyout: the list that opens beside the
+    -- button. The tooltips call it that, since that's what it looks like.
+    AttachTip(config.always, "Always show panel",
+        "Keep the flyout (the list beside the button) open all the time, "
+        .. "instead of only while you hover over the button.")
+
+    AttachTip(config.discover, "Auto-detect bag items",
+        "Also use healing items that aren't on HealPop's built-in list, "
+        .. "found by reading their tooltips.\n\n"
+        .. "Food you have to sit down to eat, and soulstones, are ignored. "
+        .. "Turn this off to use only the built-in list.")
+
+    AttachTip(config.hideEmpty, "Hide when nothing usable",
+        "Hide the button completely when you have nothing to use.\n\n"
+        .. "A hidden button can't be clicked, so its key binding does nothing "
+        .. "while it's hidden.")
+
+    AttachTip(config.chainAcross, "One click, may spend extra",
+        "Off: left-click uses consumables and right-click uses spells, "
+        .. "so a single click never mixes the two.\n\n"
+        .. "On: left-click tries everything in priority order, spells and "
+        .. "consumables together. Spells and consumables are on separate "
+        .. "cooldowns, so one press can cast a spell AND use a healthstone or "
+        .. "potion. Faster in an emergency, but it can spend something you "
+        .. "didn't need.\n\n"
+        .. "Right-click uses spells either way.")
+
+    AttachTip(config.splitFace, "Split icon for left/right click",
+        "When left-click and right-click do different things, show both on "
+        .. "the button: the left half is what left-click does, the right half "
+        .. "is what right-click does. A half greys out when its action can't "
+        .. "be used right now.\n\n"
+        .. "Off: a square button showing only the left-click action.")
+
+    TipDropdown(config.panelSide, "Flyout side",
+        "Which side of the button the flyout opens on.")
+
+    TipSlider(config.scale, "Scale",
+        "Size of the button and the flyout together, text included.")
+
+    TipSlider(config.size, "Button size",
+        "Size of the button alone. The flyout isn't affected; Scale "
+        .. "changes both.")
+
+    TipSlider(config.alpha, "Background opacity",
+        "How solid the dark backing is behind the flyout and around the "
+        .. "button. 0% is invisible.")
+
+    TipSlider(config.rows, "Panel rows",
+        "How many options the flyout lists below the one at the top.")
+
+    TipSlider(config.chain, "Fallback depth",
+        "How many options each click holds, in order. If the first can't be "
+        .. "used, on cooldown or run out, the click moves on to the next.\n\n"
+        .. "What each click holds is locked when combat starts, so a higher "
+        .. "number keeps a click useful for longer in a fight.")
+
+    TipSlider(config.guard, "Spell guard",
+        "Keeps a stray click at high health from wasting a spell with a long "
+        .. "cooldown.\n\n"
+        .. "Above this health, spells only fire while you're in combat. "
+        .. "Consumables aren't affected: the game already refuses those at "
+        .. "full health.\n\n"
+        .. "All the way right turns it off.")
+
+    TipSlider(config.fontSize, "Heal text size",
+        "Size of the heal number on the square button. On the split icon, "
+        .. "each half's number sizes itself to fit.")
+
+    TipDropdown(config.fontFace, "Font",
+        "Font for the numbers shown on the button.")
 
     config:SetScript("OnShow", function()
         local d = ns.DB()
