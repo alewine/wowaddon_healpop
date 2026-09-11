@@ -438,6 +438,12 @@ function ui.ApplyFont()
                 t:SetFont(ns.FONTS[1].path, halfSize, "OUTLINE")
             end
         end
+        local healSize = math.max(7, math.floor(size * 0.22))
+        for _, t in ipairs({ split.healL, split.healR }) do
+            if not t:SetFont(face.path, healSize, "OUTLINE") then
+                t:SetFont(ns.FONTS[1].path, healSize, "OUTLINE")
+            end
+        end
     end
 end
 
@@ -573,6 +579,18 @@ function ui.Create()
         t:SetJustifyH("CENTER")
     end
 
+    -- Heal value per half, small, at the top. Clear of the countdown (centre)
+    -- and the stack badge (bottom-left).
+    split.healL = split.textFrame:CreateFontString(nil, "OVERLAY")
+    split.healL:SetPoint("TOP", split.iconL, "TOP", 0, -2)
+    split.healR = split.textFrame:CreateFontString(nil, "OVERLAY")
+    split.healR:SetPoint("TOP", split.iconR, "TOP", 0, -2)
+    for _, t in ipairs({ split.healL, split.healR }) do
+        t:SetShadowColor(0, 0, 0, 1)
+        t:SetShadowOffset(1, -1)
+        t:SetJustifyH("CENTER")
+    end
+
     local function SaveAnchorPos()
         anchor:StopMovingOrSizing()
         local p, _, rp, x, y = anchor:GetPoint()
@@ -650,11 +668,24 @@ local function CompactTime(seconds)
     return tostring(math.ceil(seconds))
 end
 
-local function PaintHalf(icon, fill, text, e, iconHeight)
+local function PaintHalf(icon, fill, text, heal, e, iconHeight)
     icon:SetTexture(e.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
     icon:SetDesaturated(not e.ready)
     local shade = e.ready and 1 or 0.55
     icon:SetVertexColor(shade, shade, shade, 1)
+
+    -- Unlike the whole icon's centred number, this can't collide with the
+    -- countdown, so it stays up while the half is cooling -- greyed with it.
+    if e.heal and e.heal > 0 then
+        heal:SetText(ns.FormatHeal(e.heal))
+        if e.ready then
+            heal:SetTextColor(0.62, 1.0, 0.62, 1)
+        else
+            heal:SetTextColor(0.6, 0.6, 0.6, 1)
+        end
+    else
+        heal:SetText("")
+    end
 
     local cooling = not e.ready and e.cdStart and e.cdStart > 0
         and e.cdDuration and e.cdDuration > 0
@@ -686,7 +717,7 @@ function ui.Refresh(display)
     -- back to PrimaryEntry only if nothing has been recorded yet.
     local left  = ns.BindingHead("left", display) or ns.PrimaryEntry(display)
     local right = ns.BindingHead("right", display)
-    local splitMode = left and right and left.key ~= right.key
+    local splitMode = db.splitFace and left and right and left.key ~= right.key
 
     -- Wider when split. Resizing the protected anchor is blocked in combat, so
     -- a mid-fight flip draws into the current size (FitIcon keeps it
@@ -728,8 +759,10 @@ function ui.Refresh(display)
         button.healTag.text:SetText("")
 
         local iconHeight = math.max(0, (button:GetHeight() or 0) - 2)
-        PaintHalf(button.split.iconL, button.split.fillL, button.split.textL, left, iconHeight)
-        PaintHalf(button.split.iconR, button.split.fillR, button.split.textR, right, iconHeight)
+        PaintHalf(button.split.iconL, button.split.fillL, button.split.textL,
+                  button.split.healL, left, iconHeight)
+        PaintHalf(button.split.iconR, button.split.fillR, button.split.textR,
+                  button.split.healR, right, iconHeight)
         local halfWidth = math.max(0, (button:GetWidth() or 0) / 2 - 1)
         FitIcon(button.split.iconL, halfWidth, iconHeight)
         FitIcon(button.split.iconR, halfWidth, iconHeight)

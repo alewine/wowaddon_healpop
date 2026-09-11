@@ -357,9 +357,16 @@ function ns.CreateConfig()
         function() return ns.DB().chainAcross end,
         function(v) ns.DB().chainAcross = v; Changed() end)
 
+    -- Split face on/off. Off is the plain square button showing only the
+    -- left-click action. Changed() triggers the refresh that resizes it.
+    config.splitFace = AddCheck(config, "SplitFace", config.chainAcross, -4,
+        "Split icon for left/right click",
+        function() return ns.DB().splitFace end,
+        function(v) ns.DB().splitFace = v; Changed() end)
+
     local reset = CreateFrame("Button", nil, config, "UIPanelButtonTemplate")
     reset:SetSize(130, 20)
-    reset:SetPoint("TOPLEFT", config.chainAcross, "BOTTOMLEFT", 4, -6)
+    reset:SetPoint("TOPLEFT", config.splitFace, "BOTTOMLEFT", 4, -6)
     reset:SetText("Reset position")
     reset:SetScript("OnClick", function()
         local d = ns.DB()
@@ -517,7 +524,7 @@ function ns.CreateConfig()
         local face = ns.FONTS[d.fontFace or 1] or ns.FONTS[1]
         UIDropDownMenu_SetText(config.fontFace, face.name)
         for _, cb in ipairs({ config.always, config.discover,
-                              config.hideEmpty, config.chainAcross }) do
+                              config.hideEmpty, config.chainAcross, config.splitFace }) do
             cb:SetChecked(cb.get() and true or false)
         end
         RefreshCategories()
@@ -543,7 +550,7 @@ end
 function ns.RefreshConfigToggles()
     if not (config and config:IsShown()) then return end
     for _, cb in ipairs({ config.always, config.discover,
-                          config.hideEmpty, config.chainAcross }) do
+                          config.hideEmpty, config.chainAcross, config.splitFace }) do
         cb:SetChecked(cb.get() and true or false)
     end
 end
