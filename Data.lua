@@ -48,7 +48,8 @@ ns.SPELLS = {
     { id = 11426, off = true },           -- Ice Barrier
     { id = 139,   off = true },           -- Renew
     { id = 774,   off = true },           -- Rejuvenation
-    { id = 6789,  off = true },           -- Death Coil (needs an enemy target)
+    -- No Death Coil: it heals you only by hitting an enemy, and every HealPop
+    -- action is forced onto the player, so it could never fire.
 }
 
 -- ── Healthstones ─────────────────────────────────────────────────────

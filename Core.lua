@@ -391,10 +391,8 @@ local function CollectSpells(out)
                 icon     = known.icon,
                 heal     = math.floor((heal or 0) + 0.5),
                 count    = nil,
-                -- [@player]: several of these are targetable -- Gift of the Naaru,
-                -- Lay on Hands, Renew. With a friendly target selected a bare
-                -- /cast heals *them*, the wrong way round for a self-panic button.
-                macro    = "/cast [@player] " .. known.name,
+                verb     = "/cast",
+                subject  = known.name,
             }
         end
     end
@@ -418,7 +416,6 @@ local function CollectItems(out)
         if not heal or heal <= 0 then return end
         seen[itemID] = true
 
-        local prefix = (category == "bandages") and "/use [@player] " or "/use "
         out[#out + 1] = {
             key      = "item:" .. itemID,
             kind     = "item",
@@ -428,7 +425,8 @@ local function CollectItems(out)
             icon     = icon,
             heal     = math.floor(heal + 0.5),
             count    = count,
-            macro    = prefix .. name,
+            verb     = "/use",
+            subject  = name,
         }
     end
 
@@ -462,7 +460,8 @@ local function CollectTrinkets(out)
                     name     = name or ("Trinket " .. slot),
                     icon     = icon,
                     heal     = heal,
-                    macro    = "/use " .. slot,
+                    verb     = "/use",
+                    subject  = tostring(slot),
                 }
             end
         end
@@ -635,6 +634,27 @@ local function MatchesFilter(e, filter)
     return true
 end
 
+-- Every line HealPop emits is built here and nowhere else, and "@player" is
+-- the first condition of every one -- spells, potions, bandages, trinkets,
+-- both click bindings, panic mode. It's structural rather than a prefix each
+-- collector remembers to add: several shipped spells (Gift of the Naaru, Lay on
+-- Hands, Renew) and some on-use trinkets take a target, and with a friendly
+-- target selected a bare /cast or /use heals *them*.
+--
+-- Conditions share ONE bracket group. Separate groups are OR'd, so
+-- "[@player] [combat]" would not mean "on me, in combat".
+local function ComposeLine(e, guard)
+    if not (e.verb and e.subject) then return nil end
+    local conds = { "@player" }
+    if guard and e.kind == "spell" then conds[#conds + 1] = "combat" end
+    local line = e.verb .. " [" .. table.concat(conds, ",") .. "] " .. e.subject
+    -- Belt and braces: a line that somehow isn't self-targeted is dropped, not
+    -- fired. Casting nothing beats casting on the wrong person.
+    if not line:find("^/%a+ %[@player[,%]]") then return nil end
+    return line
+end
+ns.ComposeLine = ComposeLine
+
 function ns.BuildMacro(list, filter)
     local db = ns.DB()
     local depth = math.max(1, math.min(db.chainDepth or 3, 6))
@@ -644,13 +664,8 @@ function ns.BuildMacro(list, filter)
     for _, e in ipairs(list) do
         if #lines >= depth then break end
         if MatchesFilter(e, filter) then
-            local line = e.macro
-            if guard and e.kind == "spell" then
-                -- One bracket group, not two: separate groups are OR'd, so
-                -- "[@player] [combat]" is not "on me, in combat".
-                line = (line:gsub("^/cast %[@player%] ", "/cast [@player,combat] ", 1))
-            end
-            if #line + 1 <= budget then
+            local line = ComposeLine(e, guard)
+            if line and #line + 1 <= budget then
                 lines[#lines + 1] = line
                 budget = budget - (#line + 1)
             end
