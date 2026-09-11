@@ -571,7 +571,12 @@ function ui.Refresh(display)
         button.icon:SetTexture(show.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
         button.icon:SetDesaturated(not show.ready)
         button.icon:SetAlpha(show.ready and 1 or 0.6)
-        button.healTag.text:SetText(ns.FormatHeal(show.heal))
+        -- Blank rather than "?" when the value is unknown, and hidden while a
+        -- cooldown runs: the cooldown frame -- or ElvUI/OmniCC text layered on
+        -- it -- draws its countdown dead centre, exactly where this sits.
+        local cooling = not show.ready and show.cdStart and show.cdStart > 0
+        local known = show.heal and show.heal > 0
+        button.healTag.text:SetText((known and not cooling) and ns.FormatHeal(show.heal) or "")
 
         if show.count and show.count > 1 then
             button.badge.text:SetText(show.count)

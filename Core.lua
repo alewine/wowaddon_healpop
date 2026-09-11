@@ -104,6 +104,7 @@ local HEAL_PATTERNS = {
     { "restores? (%d+) health",            function(a)    return a end },
     { "heals? you for (%d+)",              function(a)    return a end },
     { "heals? the target for (%d+)",       function(a)    return a end },
+    { "heals? the target of (%d+)",        function(a)    return a end },
     { "heals? (%d+) damage",               function(a)    return a end },
     { "for (%d+) over %d+ sec",            function(a)    return a end },
     { "(%d+) health over",                 function(a)    return a end },
@@ -390,7 +391,10 @@ local function CollectSpells(out)
                 icon     = known.icon,
                 heal     = math.floor((heal or 0) + 0.5),
                 count    = nil,
-                macro    = "/cast " .. known.name,
+                -- [@player]: several of these are targetable -- Gift of the Naaru,
+                -- Lay on Hands, Renew. With a friendly target selected a bare
+                -- /cast heals *them*, the wrong way round for a self-panic button.
+                macro    = "/cast [@player] " .. known.name,
             }
         end
     end
@@ -642,7 +646,9 @@ function ns.BuildMacro(list, filter)
         if MatchesFilter(e, filter) then
             local line = e.macro
             if guard and e.kind == "spell" then
-                line = (line:gsub("^/cast ", "/cast [combat] ", 1))
+                -- One bracket group, not two: separate groups are OR'd, so
+                -- "[@player] [combat]" is not "on me, in combat".
+                line = (line:gsub("^/cast %[@player%] ", "/cast [@player,combat] ", 1))
             end
             if #line + 1 <= budget then
                 lines[#lines + 1] = line
