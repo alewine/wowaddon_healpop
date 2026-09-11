@@ -660,39 +660,65 @@ function ns.BuildMacro(list, filter)
     local depth = math.max(1, math.min(db.chainDepth or 3, 6))
     local guard = SpellGuardActive()
 
-    local lines, budget = {}, MACRO_BUDGET
+    local lines, used, budget = {}, {}, MACRO_BUDGET
     for _, e in ipairs(list) do
         if #lines >= depth then break end
         if MatchesFilter(e, filter) then
             local line = ComposeLine(e, guard)
             if line and #line + 1 <= budget then
                 lines[#lines + 1] = line
+                used[#used + 1] = e
                 budget = budget - (#line + 1)
             end
         end
     end
 
-    if #lines == 0 then return nil end
-    return table.concat(lines, "\n")
+    if #lines == 0 then return nil, nil end
+    -- Second return: the entries behind each line, so the button face can
+    -- depict exactly what the attributes hold.
+    return table.concat(lines, "\n"), used
 end
 
 local lastMacro, lastAltMacro = nil, nil
 
 -- Push the macro onto the secure button. No-ops during combat lockdown --
 -- the chain built before the pull carries you through the fight.
+-- The entries behind each binding's macro, snapshotted when the attributes
+-- were last written. Snapshots rather than the entry tables themselves: bag
+-- and spell events rebuild the priority list mid-combat, while the attributes
+-- stay frozen, so these are matched back to live state by key.
+local bindingChains = { left = nil, right = nil }
+
+local function Snapshot(entries)
+    if not entries then return nil end
+    local out = {}
+    for i, e in ipairs(entries) do
+        out[i] = { key = e.key, icon = e.icon, name = e.name, kind = e.kind,
+                   category = e.category, heal = e.heal }
+    end
+    return out
+end
+
 function ns.ApplyMacro(button, list)
     if not button then return false end
     if InCombatLockdown() then return false end
 
     list = list or ns.SortForDisplay(ns.Annotate(ns.BuildPriority()))
     -- Panic mode ignores the split entirely and chains everything.
-    local macro
+    local macro, leftUsed
     if ns.DB().chainAcross then
-        macro = ns.BuildMacro(list)
+        macro, leftUsed = ns.BuildMacro(list)
     else
-        macro = ns.BuildMacro(list, "items") or ns.BuildMacro(list, "spells")
+        macro, leftUsed = ns.BuildMacro(list, "items")
+        if not macro then macro, leftUsed = ns.BuildMacro(list, "spells") end
     end
-    local alt = ns.BuildMacro(list, "spells")
+    local alt, rightUsed = ns.BuildMacro(list, "spells")
+
+    -- Recorded on every out-of-combat pass, ahead of the no-change shortcut.
+    -- Once combat locks the attributes this is the only honest record of what
+    -- each click will do, and the button face is drawn from it.
+    bindingChains.left, bindingChains.right = Snapshot(leftUsed), Snapshot(rightUsed)
+
     if macro == lastMacro and alt == lastAltMacro then return true end
     lastMacro, lastAltMacro = macro, alt
 
@@ -718,6 +744,32 @@ end
 
 function ns.CurrentMacro()
     return lastMacro, lastAltMacro
+end
+
+-- What a click on `which` ("left" or "right") will do right now: the first
+-- line of its recorded chain that's usable, because unusable lines fail
+-- through to the next. Returns nil if no chain was ever recorded -- e.g. the
+-- UI loaded while already in combat -- so the caller can fall back.
+function ns.BindingHead(which, display)
+    local chain = bindingChains[which]
+    if not chain or #chain == 0 then return nil end
+
+    local byKey = {}
+    for _, e in ipairs(display) do byKey[e.key] = e end
+
+    local fallback
+    for _, snap in ipairs(chain) do
+        local live = byKey[snap.key]
+        if live and live.ready then return live end
+        fallback = fallback or live
+    end
+    if fallback then return fallback end
+
+    -- Everything in the chain has left the bags since the pull. The click
+    -- still holds these lines, so show the first one, unusable.
+    local s = chain[1]
+    return { key = s.key, icon = s.icon, name = s.name, kind = s.kind,
+             category = s.category, heal = s.heal, ready = false, cdStart = 0 }
 end
 
 function ns.InvalidateMacro()

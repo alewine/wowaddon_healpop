@@ -396,6 +396,19 @@ function ui.ApplyFont()
     if not text:SetFont(face.path, db.fontSize or 20, "OUTLINE") then
         text:SetFont(ns.FONTS[1].path, db.fontSize or 20, "OUTLINE")
     end
+
+    -- Half-width countdowns scale with the button, not the heal-text slider:
+    -- at the heal size they'd spill across the divider.
+    local split = ui.button.split
+    if split then
+        local size = math.max(24, math.min(db.buttonSize or 48, 96))
+        local halfSize = math.max(8, math.floor(size * 0.3))
+        for _, t in ipairs({ split.textL, split.textR }) do
+            if not t:SetFont(face.path, halfSize, "OUTLINE") then
+                t:SetFont(ns.FONTS[1].path, halfSize, "OUTLINE")
+            end
+        end
+    end
 end
 
 function ui.ApplyBgAlpha()
@@ -473,6 +486,63 @@ function ui.Create()
     healTag.text:SetPoint("CENTER", healTag, "CENTER", 0, 0)
     button.healTag = healTag
 
+    -- Split face: left half shows the left-click action, right half the
+    -- right-click action, so the icon itself says which button to press.
+    -- Lives on its own insecure frame rather than the secure button, which
+    -- can't be touched in combat. Sits above the cooldown frame (which is
+    -- cleared in split mode) and below the badge and heal text.
+    local split = CreateFrame("Frame", nil, button)
+    split:SetAllPoints(button)
+    split:SetFrameLevel(button:GetFrameLevel() + 3)
+    split:Hide()
+    button.split = split
+
+    split.iconL = split:CreateTexture(nil, "ARTWORK")
+    split.iconL:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
+    split.iconL:SetPoint("BOTTOMRIGHT", button, "BOTTOM", 0, 1)
+    split.iconL:SetTexCoord(0.08, 0.5, 0.08, 0.92)
+
+    split.iconR = split:CreateTexture(nil, "ARTWORK")
+    split.iconR:SetPoint("TOPLEFT", button, "TOP", 0, -1)
+    split.iconR:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
+    split.iconR:SetTexCoord(0.5, 0.92, 0.08, 0.92)
+
+    -- Cooldown shading per half, drawn from the top down. A radial swipe
+    -- distorts on a half-width strip, so this is a plain darkening bar.
+    split.fillL = split:CreateTexture(nil, "OVERLAY", nil, 1)
+    split.fillL:SetTexture("Interface\\Buttons\\WHITE8X8")
+    split.fillL:SetVertexColor(0, 0, 0, 0.65)
+    split.fillL:SetPoint("TOPLEFT", split.iconL, "TOPLEFT", 0, 0)
+    split.fillL:SetPoint("TOPRIGHT", split.iconL, "TOPRIGHT", 0, 0)
+
+    split.fillR = split:CreateTexture(nil, "OVERLAY", nil, 1)
+    split.fillR:SetTexture("Interface\\Buttons\\WHITE8X8")
+    split.fillR:SetVertexColor(0, 0, 0, 0.65)
+    split.fillR:SetPoint("TOPLEFT", split.iconR, "TOPLEFT", 0, 0)
+    split.fillR:SetPoint("TOPRIGHT", split.iconR, "TOPRIGHT", 0, 0)
+
+    split.divider = split:CreateTexture(nil, "OVERLAY", nil, 2)
+    split.divider:SetTexture("Interface\\Buttons\\WHITE8X8")
+    split.divider:SetVertexColor(0, 0, 0, 0.9)
+    split.divider:SetWidth(2)
+    split.divider:SetPoint("TOP", button, "TOP", 0, -1)
+    split.divider:SetPoint("BOTTOM", button, "BOTTOM", 0, 1)
+
+    -- Countdown text per half, on a higher child so it clears the shading.
+    split.textFrame = CreateFrame("Frame", nil, split)
+    split.textFrame:SetAllPoints(split)
+    split.textFrame:SetFrameLevel(split:GetFrameLevel() + 6)
+    split.textL = split.textFrame:CreateFontString(nil, "OVERLAY")
+    split.textL:SetPoint("CENTER", split.iconL, "CENTER", 0, 0)
+    split.textR = split.textFrame:CreateFontString(nil, "OVERLAY")
+    split.textR:SetPoint("CENTER", split.iconR, "CENTER", 0, 0)
+    for _, t in ipairs({ split.textL, split.textR }) do
+        t:SetTextColor(1, 1, 1, 1)
+        t:SetShadowColor(0, 0, 0, 1)
+        t:SetShadowOffset(1, -1)
+        t:SetJustifyH("CENTER")
+    end
+
     local function SaveAnchorPos()
         anchor:StopMovingOrSizing()
         local p, _, rp, x, y = anchor:GetPoint()
@@ -539,7 +609,39 @@ end
 
 function ui.ApplySize()
     ApplyButtonSize()
+    ui.ApplyFont()
     ui.AnchorPanel()
+end
+
+-- Whole seconds, or minutes past one: "1:23" doesn't fit in half a button.
+local function CompactTime(seconds)
+    if not seconds or seconds <= 0 then return "" end
+    if seconds >= 60 then return math.ceil(seconds / 60) .. "m" end
+    return tostring(math.ceil(seconds))
+end
+
+local function PaintHalf(icon, fill, text, e, iconHeight)
+    icon:SetTexture(e.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+    icon:SetDesaturated(not e.ready)
+    local shade = e.ready and 1 or 0.55
+    icon:SetVertexColor(shade, shade, shade, 1)
+
+    local cooling = not e.ready and e.cdStart and e.cdStart > 0
+        and e.cdDuration and e.cdDuration > 0
+    if cooling then
+        local remaining = math.max(0, e.cdStart + e.cdDuration - GetTime())
+        local frac = math.min(1, remaining / e.cdDuration)
+        if frac > 0 and iconHeight > 0 then
+            fill:SetHeight(math.max(1, frac * iconHeight))
+            fill:Show()
+        else
+            fill:Hide()
+        end
+        text:SetText(CompactTime(remaining))
+    else
+        fill:Hide()
+        text:SetText("")
+    end
 end
 
 -- Called from the throttled update loop with the ready-first sorted list.
@@ -548,26 +650,62 @@ function ui.Refresh(display)
     if not button then return end
     local db = ns.DB()
 
-    -- Sorted upstream in Core so the macro builds from the same order, and
-    -- narrowed to the left-click chain here: the button can't show one thing
-    -- and fire another.
-    local show = ns.PrimaryEntry(display)
+    -- Each face is drawn from the chain its macro actually holds (recorded
+    -- whenever the attributes were written), resolved against live state --
+    -- in combat the attributes are frozen and the live list is not. Falls
+    -- back to PrimaryEntry only if nothing has been recorded yet.
+    local left  = ns.BindingHead("left", display) or ns.PrimaryEntry(display)
+    local right = ns.BindingHead("right", display)
+    local splitMode = left and right and left.key ~= right.key
 
-    if not show then
+    -- The badge follows the item stack. In split mode that's the left half.
+    if button.badgeSplit ~= (splitMode and true or false) then
+        button.badgeSplit = splitMode and true or false
+        button.badge:ClearAllPoints()
+        if splitMode then
+            button.badge:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", -2, -2)
+        else
+            button.badge:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 2, -2)
+        end
+    end
+
+    if not left then
         if db.hideEmpty then
             AnchorShown(false)
             if ui.panel then ui.panel:Hide() end
             return
         end
         AnchorShown(true)
+        button.split:Hide()
+        button.icon:SetAlpha(0.5)
         button.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
         button.icon:SetDesaturated(true)
-        button.icon:SetAlpha(0.5)
         button.badge:Hide()
         button.healTag.text:SetText("")
         button.cooldown:Clear()
+    elseif splitMode then
+        AnchorShown(true)
+        -- The full icon and its radial cooldown sit underneath; hide both so
+        -- nothing bleeds through the halves or draws a countdown on the divider.
+        button.icon:SetAlpha(0)
+        button.cooldown:Clear()
+        button.healTag.text:SetText("")
+
+        local iconHeight = math.max(0, (button:GetHeight() or 0) - 2)
+        PaintHalf(button.split.iconL, button.split.fillL, button.split.textL, left, iconHeight)
+        PaintHalf(button.split.iconR, button.split.fillR, button.split.textR, right, iconHeight)
+        button.split:Show()
+
+        if left.count and left.count > 1 then
+            button.badge.text:SetText(left.count)
+            button.badge:Show()
+        else
+            button.badge:Hide()
+        end
     else
         AnchorShown(true)
+        button.split:Hide()
+        local show = left
         button.icon:SetTexture(show.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
         button.icon:SetDesaturated(not show.ready)
         button.icon:SetAlpha(show.ready and 1 or 0.6)

@@ -33,9 +33,11 @@ driver:SetScript("OnUpdate", function(_, elapsed)
     if dirty then Rebuild() end
     ns.Annotate(priority)
     local display = ns.SortForDisplay(priority)
-    ns.ui.Refresh(display)
 
+    -- Write the macros first: the button face is drawn from the chains they
+    -- record, so the other order paints last tick's bindings.
     ns.ApplyMacro(ns.ui.button, display)    -- no-ops while in combat lockdown
+    ns.ui.Refresh(display)
 end)
 
 -- ── Events ───────────────────────────────────────────────────────────
