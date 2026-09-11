@@ -9,11 +9,7 @@ sorted by how much they actually restore.
 
 Built for **Classic Era (1.15.x)** and **TBC Classic / Anniversary (2.5.x)**.
 
-![HealPop button in combat](screenshots/in%20game.png)
-
 ## What it picks
-
-![Priority flyout](screenshots/fly%20out%20priest.png)
 
 Six categories, in a priority order you control:
 
@@ -120,8 +116,6 @@ Set the slider to 100% to switch it off.
 ## Config
 
 `/healpop` (or `/hp`) opens the config.
-
-![Options window](screenshots/config.png)
 
 - **Priority** — reorder categories with `^` / `v`, or uncheck to disable one.
 - **Available to this character** — every spell and item HealPop found, with a

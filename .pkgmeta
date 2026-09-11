@@ -13,6 +13,5 @@ ignore:
   - .github
   - .gitignore
   - .pkgmeta
-  - screenshots
   - media
   - logo.png

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.2
+- Every action is now used on yourself. With a friendly target selected,
+  targetable spells (Gift of the Naaru, Lay on Hands, Renew) and some healing
+  trinkets could heal your target instead of you.
+- Death Coil is removed from the spell list: it only heals by hitting an
+  enemy, so it can't be used on yourself.
+- Gift of the Naaru's heal amount now reads correctly instead of showing "?".
+- The heal number on the button no longer overlaps the cooldown countdown.
+- New option, off by default: split icon for left/right click. When the two
+  clicks do different things, the button widens and shows both: left half is
+  left-click, right half is right-click. Each half greys out when its action
+  can't be used, and shows its own heal amount and countdown.
+- Options now explain themselves on hover, and clicking a checkbox's label
+  toggles it.
+
 ## 1.0.1
 - Published builds now cover Classic Era as well as TBC Anniversary. The 1.0
   upload was listed for 2.5.6 only, so Era players could not find the addon
