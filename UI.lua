@@ -353,13 +353,43 @@ local function AnchorShown(shown)
     if shown then ui.anchor:Show() else ui.anchor:Hide() end
 end
 
+-- Split face width, as a multiple of the height. 1.4 makes each half 70% as
+-- wide as it is tall, so each shows most of its icon rather than exactly half
+-- -- half a potion bottle next to half a spell doesn't read as either.
+local SPLIT_WIDTH = 1.4
+
+-- Crop an icon's usable area (0.08-0.92, inside Blizzard's border) to the
+-- shape of the region drawing it, centred. Split halves are narrower than
+-- tall; a mid-combat flip can leave the whole icon on a wide button. Either
+-- way the art fills the region without stretching, and centring keeps the
+-- subject, which icons nearly always put in the middle.
+local function FitIcon(tex, w, h)
+    local lo, span = 0.08, 0.84
+    if not (w and h) or w <= 0 or h <= 0 then
+        tex:SetTexCoord(lo, lo + span, lo, lo + span)
+        return
+    end
+    local aspect = w / h
+    if aspect < 1 then
+        local cw = span * aspect
+        local x0 = 0.5 - cw / 2
+        tex:SetTexCoord(x0, x0 + cw, lo, lo + span)
+    else
+        local ch = span / aspect
+        local y0 = 0.5 - ch / 2
+        tex:SetTexCoord(lo, lo + span, y0, y0 + ch)
+    end
+end
+
 local function ApplyButtonSize()
     if InCombatLockdown() then return end
     local db = ns.DB()
     local size = math.max(24, math.min(db.buttonSize or 48, 96))
-    ui.anchor:SetSize(size, size)
-    ui.button:SetSize(size, size)
-    if ui.drag then ui.drag:SetSize(size, size) end
+    local width = math.floor(size * (ui.splitActive and SPLIT_WIDTH or 1) + 0.5)
+    ui.anchor:SetSize(width, size)
+    ui.button:SetSize(width, size)
+    if ui.drag then ui.drag:SetSize(width, size) end
+    ui.sizedForSplit = ui.splitActive and true or false
 end
 
 -- Edit mode is the options window being open -- there is no separate lock.
@@ -658,6 +688,12 @@ function ui.Refresh(display)
     local right = ns.BindingHead("right", display)
     local splitMode = left and right and left.key ~= right.key
 
+    -- Wider when split. Resizing the protected anchor is blocked in combat, so
+    -- a mid-fight flip draws into the current size (FitIcon keeps it
+    -- undistorted) and PLAYER_REGEN_ENABLED re-applies the width.
+    ui.splitActive = splitMode and true or false
+    if ui.sizedForSplit ~= ui.splitActive then ApplyButtonSize() end
+
     -- The badge follows the item stack. In split mode that's the left half.
     if button.badgeSplit ~= (splitMode and true or false) then
         button.badgeSplit = splitMode and true or false
@@ -694,6 +730,9 @@ function ui.Refresh(display)
         local iconHeight = math.max(0, (button:GetHeight() or 0) - 2)
         PaintHalf(button.split.iconL, button.split.fillL, button.split.textL, left, iconHeight)
         PaintHalf(button.split.iconR, button.split.fillR, button.split.textR, right, iconHeight)
+        local halfWidth = math.max(0, (button:GetWidth() or 0) / 2 - 1)
+        FitIcon(button.split.iconL, halfWidth, iconHeight)
+        FitIcon(button.split.iconR, halfWidth, iconHeight)
         button.split:Show()
 
         if left.count and left.count > 1 then
@@ -707,6 +746,8 @@ function ui.Refresh(display)
         button.split:Hide()
         local show = left
         button.icon:SetTexture(show.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+        FitIcon(button.icon, math.max(0, (button:GetWidth() or 0) - 2),
+                             math.max(0, (button:GetHeight() or 0) - 2))
         button.icon:SetDesaturated(not show.ready)
         button.icon:SetAlpha(show.ready and 1 or 0.6)
         -- Blank rather than "?" when the value is unknown, and hidden while a
